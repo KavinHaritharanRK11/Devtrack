@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DevTrack — Smart Study Command Center</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#"><span class="brand-mark">D</span><span>DevTrack<span class="brand-dot">.</span></span></a>
+      <p class="nav-label">WORKSPACE</p>
+      <a class="nav-link active" href="#dashboard"><span>⌂</span> Overview</a>
+      <a class="nav-link" href="#tasks-section"><span>▤</span> My tasks</a>
+      <a class="nav-link" href="#focus-section"><span>◷</span> Focus mode</a>
+      <a class="nav-link" href="#analytics-section"><span>▥</span> Analytics</a>
+      <div class="sidebar-bottom">
+        <div class="level-card">
+          <div class="level-top"><span>YOUR LEVEL</span><span id="levelLabel">Level 1</span></div>
+          <div class="level-number"><strong id="sidebarLevel">1</strong><span>Keep learning, one step at a time.</span></div>
+          <div class="mini-progress"><div id="xpProgress"></div></div>
+          <small id="xpLabel">0 / 100 XP to next level</small>
+        </div>
+        <p class="sidebar-foot">Built for steady progress.<br>© 2026 DevTrack</p>
+      </div>
+    </aside>
+
+    <main class="main-content" id="dashboard">
+      <header class="topbar">
+        <div class="mobile-brand"><span class="brand-mark">D</span> DevTrack<span class="brand-dot">.</span></div>
+        <div class="breadcrumb">Workspace <span>/</span> Overview</div>
+        <div class="topbar-right"><span class="live-dot"></span><span>Personal study space</span><div class="avatar">S</div></div>
+      </header>
+
+      <section class="welcome-row">
+        <div>
+          <p class="eyebrow" id="greeting">YOUR SMART STUDY DASHBOARD</p>
+          <h1>Good day<span class="accent">.</span></h1>
+          <p class="subheading">Let's make today productive, one step at a time.</p>
+        </div>
+        <div class="date-pill"><span>◷</span><span id="today"></span></div>
+      </section>
+
+      <section class="stats-grid">
+        <article class="stat-card">
+          <div class="stat-icon purple">▤</div><p>Pending tasks</p><strong id="pendingTasks">0</strong><small>Ready when you are</small>
+        </article>
+        <article class="stat-card">
+          <div class="stat-icon green">✓</div><p>Completed tasks</p><strong id="completedTasks">0</strong><small>Every step counts</small>
+        </article>
+        <article class="stat-card">
+          <div class="stat-icon blue">◉</div><p>Weekly progress</p><strong id="weeklyProgress">0%</strong><small id="weeklyCaption">Completed this week</small>
+        </article>
+        <article class="stat-card">
+          <div class="stat-icon orange">✦</div><p>Total experience</p><strong><span id="totalXP">0</span> <em>XP</em></strong><small id="levelCaption">Level 1 learner</small>
+        </article>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel next-panel">
+          <div class="panel-heading"><div><p class="eyebrow">YOUR NEXT BEST MOVE</p><h2>Make a little progress</h2></div><span class="sparkle">✧</span></div>
+          <div id="recommendation" class="recommendation">
+            <div class="recommend-icon">✦</div><div><span class="recommend-tag">RECOMMENDED NEXT</span><h3>You're all caught up</h3><p>Add a task and DevTrack will suggest a useful next step.</p></div>
+          </div>
+          <div class="recommend-footer"><span>Suggested focus session</span><strong>25 minutes</strong></div>
+          <button class="button button-primary" id="startRecommended">Start a focus session <span>→</span></button>
+        </article>
+
+        <article class="panel streak-panel">
+          <div class="panel-heading"><div><p class="eyebrow">SHOWING UP MATTERS</p><h2>Your study activity</h2></div><span class="streak-icon">✦</span></div>
+          <div class="streak-summary"><strong id="streakCount">0 days</strong><span>current activity streak</span></div>
+          <div class="week-days" id="weekDays"></div>
+          <p class="muted-note">A small, consistent step is a win. Rest days are part of learning too.</p>
+        </article>
+      </section>
+
+      <section class="lower-grid">
+        <article class="panel focus-panel" id="focus-section">
+          <div class="panel-heading"><div><p class="eyebrow">FOCUS MODE</p><h2>One thing at a time</h2></div><span class="panel-symbol">◷</span></div>
+          <p class="focus-description">Set aside a short, distraction-free study block. You can pause or reset whenever you need.</p>
+          <div class="timer-display" id="timerDisplay">25:00</div>
+          <div class="timer-progress"><div id="timerProgress"></div></div>
+          <div class="timer-controls"><button class="button button-primary" id="timerStart">Start focus</button><button class="button button-quiet" id="timerReset">Reset</button></div>
+          <p class="timer-status" id="timerStatus">25-minute focus session · take a break afterwards</p>
+        </article>
+
+        <article class="panel analytics-panel" id="analytics-section">
+          <div class="panel-heading"><div><p class="eyebrow">PERSONAL ANALYTICS</p><h2>Tasks by subject</h2></div><span class="panel-symbol">▥</span></div>
+          <div id="categoryAnalytics" class="category-analytics"><p class="empty-analytics">Add tasks to see your subject breakdown.</p></div>
+          <div class="analytics-legend"><span><i class="legend-dot done"></i> Completed</span><span><i class="legend-dot pending"></i> Pending</span></div>
+        </article>
+      </section>
+
+      <section class="panel tasks-panel" id="tasks-section">
+        <div class="panel-heading task-heading"><div><p class="eyebrow">YOUR WORKSPACE</p><h2>My tasks</h2></div><span class="task-count" id="taskCount">0 tasks</span></div>
+        <form id="taskForm" class="task-form">
+          <input type="text" id="taskInput" placeholder="What do you need to work on?" maxlength="150" required>
+          <input type="date" id="taskDate">
+          <input type="text" id="taskCategory" list="categorySuggestions" placeholder="Subject / category" maxlength="50" required>
+          <datalist id="categorySuggestions"></datalist>
+          <button class="button button-primary" type="submit">＋ Add task</button>
+        </form>
+        <div class="task-toolbar">
+          <input type="search" id="searchInput" placeholder="Search your tasks...">
+          <div class="filter-group">
+            <button type="button" class="filter-btn active" data-filter="all">All</button>
+            <button type="button" class="filter-btn" data-filter="pending">Pending</button>
+            <button type="button" class="filter-btn" data-filter="completed">Completed</button>
+            <select id="categoryFilter"><option value="all">All subjects</option></select>
+          </div>
+        </div>
+        <ul id="taskList" class="task-list"></ul>
+      </section>
+
+      <footer class="page-footer">DevTrack <span>·</span> Stay curious. Keep moving forward.</footer>
+    </main>
+  </div>
+</body>
+</html>
