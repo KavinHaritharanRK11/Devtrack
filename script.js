@@ -1,15 +1,24 @@
+
 // DevTrack 2.0 — Smart Study Command Center
 
 const STORAGE_KEY = "tasks";
 const META_KEY = "devtrack_meta_v2";
 
+const MAX_LEVEL = 100;
+const TASK_XP = 20;
+const FOCUS_XP = 10;
+const FOCUS_SECONDS = 25 * 60;
+
 let tasks = [];
 let currentFilter = "all";
 let currentCategory = "all";
 let timerInterval = null;
-let timerRemaining = 25 * 60;
+let timerRemaining = FOCUS_SECONDS;
 
-const FOCUS_SECONDS = 25 * 60;
+// XP required to reach a particular level
+function xpForLevel(level) {
+  return Math.round(100 * Math.pow(level - 1, 1.65));
+}
 
 function safeRead(key, fallback) {
   try {
@@ -29,6 +38,8 @@ function getMeta() {
 let meta = getMeta();
 
 if (!Number.isFinite(meta.xp)) meta.xp = 0;
+meta.xp = Math.max(0, meta.xp);
+
 if (!Array.isArray(meta.activityDates)) meta.activityDates = [];
 if (!Number.isFinite(meta.focusSessions)) meta.focusSessions = 0;
 
@@ -73,7 +84,7 @@ function saveTasks() {
 function dateKey(date = new Date()) {
   const d = new Date(date);
 
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function shiftDate(date, amount) {
@@ -98,10 +109,10 @@ function displayToday() {
 
   document.getElementById("today").textContent =
     now.toLocaleDateString("en-IN", {
-      weekday:"short",
-      day:"numeric",
-      month:"short",
-      year:"numeric"
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric"
     });
 
   const hour = now.getHours();
@@ -116,7 +127,7 @@ function displayToday() {
 function getCategories() {
   return [...new Set(
     tasks.map(t => t.category).filter(Boolean)
-  )].sort((a,b) => a.localeCompare(b));
+  )].sort((a, b) => a.localeCompare(b));
 }
 
 function updateCategoryOptions() {
@@ -156,31 +167,75 @@ function updateCategoryOptions() {
   }
 }
 
+// Level calculation
 function levelInfo(xp) {
-  const level = Math.floor(Math.max(0, xp) / 100) + 1;
+  xp = Math.max(0, Number(xp) || 0);
+
+  let level = 1;
+
+  for (let i = 2; i <= MAX_LEVEL; i++) {
+    if (xp >= xpForLevel(i)) {
+      level = i;
+    } else {
+      break;
+    }
+  }
+
+  const currentThreshold = xpForLevel(level);
+
+  if (level === MAX_LEVEL) {
+    return {
+      level,
+      into: 100,
+      needed: 100,
+      remaining: 0,
+      progress: 100,
+      maxLevel: true
+    };
+  }
+
+  const nextThreshold = xpForLevel(level + 1);
+  const needed = nextThreshold - currentThreshold;
+  const into = xp - currentThreshold;
+  const remaining = nextThreshold - xp;
 
   return {
     level,
-    into: Math.max(0, xp) % 100,
-    remaining: 100 - (Math.max(0, xp) % 100)
+    into,
+    needed,
+    remaining,
+    progress: Math.min(100, (into / needed) * 100),
+    maxLevel: false
   };
 }
 
+// XP display
 function renderXP() {
   const info = levelInfo(meta.xp);
 
   document.getElementById("totalXP").textContent = meta.xp;
   document.getElementById("sidebarLevel").textContent = info.level;
-  document.getElementById("levelLabel").textContent = `Level ${info.level}`;
-  document.getElementById("levelCaption").textContent = `Level ${info.level} learner`;
-  document.getElementById("xpProgress").style.width = `${info.into}%`;
+
+  document.getElementById("levelLabel").textContent =
+    info.maxLevel ? "MAX LEVEL" : `Level ${info.level}`;
+
+  document.getElementById("levelCaption").textContent =
+    info.maxLevel
+      ? "Level 100 · MAX LEVEL"
+      : `Level ${info.level} learner`;
+
+  document.getElementById("xpProgress").style.width =
+    `${info.progress}%`;
+
   document.getElementById("xpLabel").textContent =
-    `${info.into} / 100 XP to next level`;
+    info.maxLevel
+      ? `MAX LEVEL · ${meta.xp} XP earned`
+      : `${info.into} / ${info.needed} XP · ${info.remaining} XP to next level`;
 }
 
 function completedThisWeek() {
   const cutoff = shiftDate(new Date(), -6);
-  cutoff.setHours(0,0,0,0);
+  cutoff.setHours(0, 0, 0, 0);
 
   return tasks.filter(t =>
     t.completed &&
@@ -212,7 +267,7 @@ function renderStats() {
   renderXP();
 }
 
-function taskPriority(a,b) {
+function taskPriority(a, b) {
   if (a.date && !b.date) return -1;
   if (!a.date && b.date) return 1;
 
@@ -251,7 +306,7 @@ function renderRecommendation() {
       ? (target.date < dateKey() ? "Overdue · " : "Due · ") +
         new Date(`${target.date}T00:00:00`).toLocaleDateString(
           "en-IN",
-          {day:"numeric",month:"short"}
+          { day: "numeric", month: "short" }
         )
       : "No deadline set";
 
@@ -262,8 +317,8 @@ function renderRecommendation() {
       "Add a task whenever you're ready. There's no need to do everything at once.";
   }
 
-  body.append(tag,title,desc);
-  host.append(icon,body);
+  body.append(tag, title, desc);
+  host.append(icon, body);
 
   const start = document.getElementById("startRecommended");
 
@@ -280,15 +335,15 @@ function getStreak() {
   let count = 0;
 
   let cursor = new Date();
-  cursor.setHours(0,0,0,0);
+  cursor.setHours(0, 0, 0, 0);
 
   if (!dates.has(dateKey(cursor))) {
-    cursor = shiftDate(cursor,-1);
+    cursor = shiftDate(cursor, -1);
   }
 
   while (dates.has(dateKey(cursor)) && count < 365) {
     count++;
-    cursor = shiftDate(cursor,-1);
+    cursor = shiftDate(cursor, -1);
   }
 
   return count;
@@ -299,11 +354,11 @@ function renderWeek() {
   host.replaceChildren();
 
   const today = new Date();
-  const start = shiftDate(today,-6);
-  const labels = ["S","M","T","W","T","F","S"];
+  const start = shiftDate(today, -6);
+  const labels = ["S", "M", "T", "W", "T", "F", "S"];
 
-  for (let i=0; i<7; i++) {
-    const d = shiftDate(start,i);
+  for (let i = 0; i < 7; i++) {
+    const d = shiftDate(start, i);
     const key = dateKey(d);
 
     const cell = document.createElement("div");
@@ -326,7 +381,7 @@ function renderWeek() {
       dot.classList.add("today");
     }
 
-    cell.append(label,dot);
+    cell.append(label, dot);
     host.appendChild(cell);
   }
 
@@ -351,11 +406,11 @@ function renderAnalytics() {
   }
 
   categories
-    .sort((a,b) =>
+    .sort((a, b) =>
       tasks.filter(t => t.category === b).length -
       tasks.filter(t => t.category === a).length
     )
-    .slice(0,6)
+    .slice(0, 6)
     .forEach(category => {
       const items = tasks.filter(t => t.category === category);
       const done = items.filter(t => t.completed).length;
@@ -373,22 +428,23 @@ function renderAnalytics() {
 
       const complete = document.createElement("div");
       complete.className = "completed-segment";
-      complete.style.width = `${done/items.length*100}%`;
+      complete.style.width = `${done / items.length * 100}%`;
 
       const wait = document.createElement("div");
       wait.className = "pending-segment";
-      wait.style.width = `${pending/items.length*100}%`;
+      wait.style.width = `${pending / items.length * 100}%`;
 
       const count = document.createElement("span");
       count.className = "category-count";
       count.textContent = `${done}/${items.length}`;
 
-      track.append(complete,wait);
-      row.append(name,track,count);
+      track.append(complete, wait);
+      row.append(name, track, count);
       host.appendChild(row);
     });
 }
 
+// Create task HTML element
 function createTaskElement(task) {
   const li = document.createElement("li");
   li.className = "task-item";
@@ -406,6 +462,7 @@ function createTaskElement(task) {
 
   const metaLine = document.createElement("div");
   metaLine.className = "task-meta";
+
   metaLine.textContent =
     `${task.category || "Uncategorized"} · ${task.date || "No deadline"}`;
 
@@ -414,7 +471,7 @@ function createTaskElement(task) {
     metaLine.textContent += " · OVERDUE";
   }
 
-  info.append(name,metaLine);
+  info.append(name, metaLine);
 
   const actions = document.createElement("div");
   actions.className = "task-actions";
@@ -434,89 +491,182 @@ function createTaskElement(task) {
   del.textContent = "Delete";
   del.addEventListener("click", () => deleteTask(task.id));
 
-  actions.append(complete,edit,del);
-  li.append(info,actions);
+  actions.append(complete, edit, del);
+  li.append(info, actions);
 
   return li;
 }
 
+// NEW: Separate pending and completed task rendering
 function renderTasks() {
   updateCategoryOptions();
 
-  const list = document.getElementById("taskList");
-  list.replaceChildren();
+  const pendingList = document.getElementById("taskList");
+  const completedList = document.getElementById("completedTaskList");
+
+  pendingList.replaceChildren();
+  completedList.replaceChildren();
 
   const query = document.getElementById("searchInput")
     .value.toLowerCase().trim();
 
+  // Search and category filtering
   const visible = tasks.filter(t => {
-    if (currentFilter === "pending" && t.completed) return false;
-    if (currentFilter === "completed" && !t.completed) return false;
-    if (currentCategory !== "all" && t.category !== currentCategory) return false;
+    if (
+      currentCategory !== "all" &&
+      t.category !== currentCategory
+    ) return false;
 
-    return t.text.toLowerCase().includes(query) ||
-      t.category.toLowerCase().includes(query);
+    return (
+      t.text.toLowerCase().includes(query) ||
+      t.category.toLowerCase().includes(query)
+    );
   });
 
-  visible.forEach(t => list.appendChild(createTaskElement(t)));
+  // Apply status filters
+  const pendingTasks = visible.filter(t =>
+    !t.completed && currentFilter !== "completed"
+  );
 
-  if (!visible.length) {
+  const completedTasks = visible.filter(t =>
+    t.completed && currentFilter !== "pending"
+  );
+
+  // Render pending tasks
+  pendingTasks
+    .sort(taskPriority)
+    .forEach(task => {
+      pendingList.appendChild(createTaskElement(task));
+    });
+
+  // Render completed tasks
+  completedTasks
+    .sort((a, b) =>
+      new Date(b.completedAt || 0) -
+      new Date(a.completedAt || 0)
+    )
+    .forEach(task => {
+      completedList.appendChild(createTaskElement(task));
+    });
+
+  // Pending empty state
+  if (!pendingTasks.length) {
     const empty = document.createElement("li");
     empty.className = "empty";
-    empty.textContent = tasks.length
-      ? "No matching tasks found."
-      : "No tasks yet. Add your first task above.";
 
-    list.appendChild(empty);
+    empty.textContent = query
+      ? "No matching pending tasks."
+      : currentFilter === "completed"
+        ? "Pending tasks are hidden by this filter."
+        : "No pending tasks. You're doing great!";
+
+    pendingList.appendChild(empty);
   }
 
+  // Completed empty state
+  if (!completedTasks.length) {
+    const empty = document.createElement("li");
+    empty.className = "empty";
+
+    empty.textContent = query
+      ? "No matching completed tasks."
+      : currentFilter === "pending"
+        ? "Completed tasks are hidden by this filter."
+        : "Completed tasks will appear here.";
+
+    completedList.appendChild(empty);
+  }
+
+  // Completed task counter
+  const completedCount = tasks.filter(t => t.completed).length;
+
+  document.getElementById("completedTaskCount").textContent =
+    `${completedCount} completed`;
+
+  // Refresh dashboard
   renderStats();
   renderRecommendation();
   renderWeek();
   renderAnalytics();
 }
 
+// Complete / Undo task with reversible XP
 function toggleTask(id) {
   const task = tasks.find(t => t.id === id);
   if (!task) return;
+
+  const previousXP = meta.xp;
+  const previousCompleted = task.completed;
+  const previousAwarded = task.xpAwarded;
+  const previousCompletedAt = task.completedAt;
 
   if (!task.completed) {
     task.completed = true;
     task.completedAt = new Date().toISOString();
 
     if (!task.xpAwarded) {
-      meta.xp += 20;
+      meta.xp += TASK_XP;
       task.xpAwarded = true;
     }
 
-    recordActivity();
-    saveMeta();
   } else {
     task.completed = false;
     delete task.completedAt;
+
+    if (task.xpAwarded) {
+      meta.xp = Math.max(0, meta.xp - TASK_XP);
+      task.xpAwarded = false;
+    }
   }
 
-  if (saveTasks()) renderTasks();
+  // Rollback if saving fails
+  if (!saveTasks()) {
+    task.completed = previousCompleted;
+    task.xpAwarded = previousAwarded;
+    meta.xp = previousXP;
+
+    if (previousCompletedAt !== undefined) {
+      task.completedAt = previousCompletedAt;
+    } else {
+      delete task.completedAt;
+    }
+
+    return;
+  }
+
+  if (task.completed) {
+    recordActivity();
+  } else {
+    saveMeta();
+  }
+
+  renderTasks();
 }
 
 function editTask(id) {
   const task = tasks.find(t => t.id === id);
   if (!task) return;
 
-  const text = prompt("Edit task name:",task.text);
+  const text = prompt("Edit task name:", task.text);
   if (text === null || !text.trim()) return;
 
-  const category = prompt("Edit subject / category:",task.category);
+  const category = prompt("Edit subject / category:", task.category);
   if (category === null) return;
 
-  const date = prompt("Due date (YYYY-MM-DD), or leave blank:",task.date);
+  const date = prompt("Due date (YYYY-MM-DD), or leave blank:", task.date);
   if (date === null) return;
 
-  task.text = text.trim().slice(0,150);
-  task.category = category.trim().slice(0,50);
+  const previous = { ...task };
+
+  task.text = text.trim().slice(0, 150);
+  task.category = category.trim().slice(0, 50);
   task.date = date.trim();
 
-  if (saveTasks()) renderTasks();
+  if (saveTasks()) {
+    renderTasks();
+  } else {
+    Object.assign(task, previous);
+  }
 }
 
 function deleteTask(id) {
@@ -527,7 +677,10 @@ function deleteTask(id) {
   const previous = tasks;
   tasks = tasks.filter(t => t.id !== id);
 
-  if (!saveTasks()) tasks = previous;
+  if (!saveTasks()) {
+    tasks = previous;
+    return;
+  }
 
   renderTasks();
 }
@@ -545,12 +698,12 @@ function addTask(event) {
   }
 
   tasks.push({
-    id:`task-${Date.now()}-${Math.random().toString(16).slice(2,7)}`,
+    id: `task-${Date.now()}-${Math.random().toString(16).slice(2, 7)}`,
     text,
     date,
     category,
-    completed:false,
-    createdAt:new Date().toISOString()
+    completed: false,
+    createdAt: new Date().toISOString()
   });
 
   if (!saveTasks()) {
@@ -559,6 +712,12 @@ function addTask(event) {
   }
 
   document.getElementById("taskForm").reset();
+  currentFilter = "all";
+
+  document.querySelectorAll(".filter-btn").forEach(button => {
+    button.classList.toggle("active", button.dataset.filter === "all");
+  });
+
   renderTasks();
 }
 
@@ -568,23 +727,26 @@ function setupFilters() {
       currentFilter = button.dataset.filter;
 
       document.querySelectorAll(".filter-btn").forEach(b => {
-        b.classList.toggle("active",b === button);
+        b.classList.toggle("active", b === button);
       });
 
       renderTasks();
     });
   });
 
-  document.getElementById("categoryFilter").addEventListener("change",e => {
-    currentCategory = e.target.value;
-    renderTasks();
-  });
+  document.getElementById("categoryFilter")
+    .addEventListener("change", e => {
+      currentCategory = e.target.value;
+      renderTasks();
+    });
 
-  document.getElementById("searchInput").addEventListener("input",renderTasks);
+  document.getElementById("searchInput")
+    .addEventListener("input", renderTasks);
 }
 
+// Focus timer
 function formatTime(seconds) {
-  return `${String(Math.floor(seconds/60)).padStart(2,"0")}:${String(seconds%60).padStart(2,"0")}`;
+  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 function renderTimer() {
@@ -592,7 +754,7 @@ function renderTimer() {
     formatTime(timerRemaining);
 
   document.getElementById("timerProgress").style.width =
-    `${((FOCUS_SECONDS-timerRemaining)/FOCUS_SECONDS)*100}%`;
+    `${((FOCUS_SECONDS - timerRemaining) / FOCUS_SECONDS) * 100}%`;
 }
 
 function stopTimer() {
@@ -605,9 +767,11 @@ function stopTimer() {
 function startTimer() {
   if (timerInterval) {
     stopTimer();
+
     document.getElementById("timerStart").textContent = "Resume focus";
     document.getElementById("timerStatus").textContent =
       "Paused. Resume whenever you're ready.";
+
     return;
   }
 
@@ -626,7 +790,7 @@ function startTimer() {
     if (timerRemaining <= 0) {
       stopTimer();
 
-      meta.xp += 10;
+      meta.xp += FOCUS_XP;
       meta.focusSessions += 1;
 
       recordActivity();
@@ -639,7 +803,7 @@ function startTimer() {
 
       alert("Focus session complete! You earned 10 XP. Nice work.");
     }
-  },1000);
+  }, 1000);
 }
 
 function resetTimer() {
@@ -653,6 +817,7 @@ function resetTimer() {
     "25-minute focus session · take a break afterwards";
 }
 
+// Initialize application
 function init() {
   tasks = loadTasks();
 
@@ -660,21 +825,21 @@ function init() {
   setupFilters();
 
   document.getElementById("taskForm")
-    .addEventListener("submit",addTask);
+    .addEventListener("submit", addTask);
 
   document.getElementById("startRecommended")
-    .addEventListener("click",() => {
+    .addEventListener("click", () => {
       document.getElementById("focus-section")
-        .scrollIntoView({behavior:"smooth",block:"center"});
+        .scrollIntoView({ behavior: "smooth", block: "center" });
 
       if (!timerInterval) startTimer();
     });
 
   document.getElementById("timerStart")
-    .addEventListener("click",startTimer);
+    .addEventListener("click", startTimer);
 
   document.getElementById("timerReset")
-    .addEventListener("click",resetTimer);
+    .addEventListener("click", resetTimer);
 
   renderTimer();
   renderTasks();
